@@ -8,11 +8,13 @@ import android.bluetooth.BluetoothGatt;
 import android.bluetooth.BluetoothManager;
 import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Looper;
-
 import com.clj.fastble.bluetooth.BleBluetooth;
 import com.clj.fastble.bluetooth.MultipleBluetoothController;
 import com.clj.fastble.bluetooth.SplitWriter;
@@ -32,7 +34,6 @@ import com.clj.fastble.exception.OtherException;
 import com.clj.fastble.scan.BleScanRuleConfig;
 import com.clj.fastble.scan.BleScanner;
 import com.clj.fastble.utils.BleLog;
-
 import java.util.List;
 import java.util.UUID;
 
@@ -55,6 +56,7 @@ public class BleManager {
     private int maxConnectCount = DEFAULT_MAX_MULTIPLE_DEVICE;
     private int operateTimeout = DEFAULT_OPERATE_TIME;
     private int splitWriteNum = DEFAULT_WRITE_DATA_SPLIT_COUNT;
+    private BTStateReceiver mBtStateReceiver;
 
     public static BleManager getInstance() {
         return BleManagerHolder.sBleManager;
@@ -558,6 +560,18 @@ public class BleManager {
     }
 
     /**
+     * Open bluetooth with bluetooth state listener
+     * @param listener
+     */
+    public void enableBluetooth(OnBTOpenStateListener listener) {
+        this.btOpenStateListener=listener;
+        if (bluetoothAdapter != null) {
+            mBtStateReceiver = new BTStateReceiver();
+            registerBtStateReceiver();
+            bluetoothAdapter.enable();
+        }
+    }
+    /**
      * Disable bluetooth
      */
     public void disableBluetooth() {
@@ -700,5 +714,51 @@ public class BleManager {
         }
     }
 
+    private void registerBtStateReceiver() {
+        IntentFilter filter = new IntentFilter();
+        filter.addAction(BluetoothAdapter.ACTION_STATE_CHANGED);
+        context.registerReceiver(mBtStateReceiver, filter);
+    }
+
+    private void unRegisterBtStateReceiver() {
+        try {
+            context.unregisterReceiver(mBtStateReceiver);
+        } catch (Exception e) {
+        } catch (Throwable e) {
+        }
+
+    }
+    private OnBTOpenStateListener btOpenStateListener = null;
+
+    public interface OnBTOpenStateListener {
+        void onBTOpen();
+    }
+
+    private class BTStateReceiver extends BroadcastReceiver {
+
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            String action = intent.getAction();
+            BleLog.i("action=" + action);
+            if (action.equals(BluetoothAdapter.ACTION_STATE_CHANGED)) {
+                int state = intent
+                    .getIntExtra(BluetoothAdapter.EXTRA_STATE, -1);
+                BleLog.i("state=" + state);
+                switch (state) {
+                    case BluetoothAdapter.STATE_TURNING_ON:
+                        BleLog.i("ACTION_STATE_CHANGED:  STATE_TURNING_ON");
+                        break;
+                    case BluetoothAdapter.STATE_ON:
+                        BleLog.i("ACTION_STATE_CHANGED:  STATE_ON");
+                        if (null != btOpenStateListener){
+                            btOpenStateListener.onBTOpen();
+                        }
+                        unRegisterBtStateReceiver();
+                        break;
+                    default:
+                }
+            }
+        }
+    }
 
 }
